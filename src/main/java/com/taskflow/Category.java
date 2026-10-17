@@ -46,7 +46,9 @@ public class Category implements Serializable {
 
     private static String sanitizeText(String input, int maxLength) {
         if (input == null) return "";
-        String cleaned = input.replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", "").trim();
+        String cleaned = input.replaceAll("<[^>]*>", "")
+                             .replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", "")
+                             .trim();
         if (cleaned.length() > maxLength) {
             cleaned = cleaned.substring(0, maxLength);
         }

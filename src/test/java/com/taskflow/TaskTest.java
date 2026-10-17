@@ -48,6 +48,13 @@ class TaskTest {
     }
 
     @Test
+    void testHtmlTagStripping() {
+        Task task = new Task("<b>Title</b><script>alert(1)</script>", "<p>Hello <span>World</span></p>", "Work", "High", LocalDate.now());
+        assertEquals("Titlealert(1)", task.getTitle());
+        assertEquals("Hello World", task.getDescription());
+    }
+
+    @Test
     void testTaskEqualsAndHashCode() {
         Task t1 = new Task("Task 1", "Desc", "Work", "High", LocalDate.now());
         Task t2 = new Task("Task 2", "Desc", "Work", "High", LocalDate.now());

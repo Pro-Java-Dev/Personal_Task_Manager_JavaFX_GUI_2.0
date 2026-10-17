@@ -10,12 +10,19 @@ public class TaskRepository {
     private final Path taskFile = Path.of(System.getProperty("user.home"), ".taskflow", "tasks.dat");
     private final Path categoryFile = Path.of(System.getProperty("user.home"), ".taskflow", "categories.dat");
 
-    // Whitelist filter for safe ObjectInputStream deserialization including arrays
+    // Whitelist filter for safe ObjectInputStream deserialization
     private static final String ALLOWED_CLASSES_FILTER =
-            "com.taskflow.**;" +
-            "java.util.**;" +
-            "java.time.**;" +
-            "java.lang.**;" +
+            "com.taskflow.Task;" +
+            "com.taskflow.Category;" +
+            "java.util.ArrayList;" +
+            "java.time.Ser;" +
+            "java.time.LocalDate;" +
+            "java.lang.String;" +
+            "java.lang.Boolean;" +
+            "java.lang.Number;" +
+            "java.lang.Integer;" +
+            "java.lang.Long;" +
+            "java.lang.Object;" +
             "[*;" +
             "!*";
 
@@ -42,11 +49,12 @@ public class TaskRepository {
 
     public void save(List<Task> tasks) {
         try {
-            Files.createDirectories(taskFile.getParent());
+            ensureSecureDirectory(taskFile.getParent());
             try (OutputStream fos = Files.newOutputStream(taskFile);
                  ObjectOutputStream out = new ObjectOutputStream(fos)) {
                 out.writeObject(new ArrayList<>(tasks));
             }
+            ensureSecureFilePermissions(taskFile);
         } catch (IOException e) {
             throw new IllegalStateException("Could not save tasks", e);
         }
@@ -77,13 +85,35 @@ public class TaskRepository {
 
     public void saveCategories(List<Category> categories) {
         try {
-            Files.createDirectories(categoryFile.getParent());
+            ensureSecureDirectory(categoryFile.getParent());
             try (OutputStream fos = Files.newOutputStream(categoryFile);
                  ObjectOutputStream out = new ObjectOutputStream(fos)) {
                 out.writeObject(new ArrayList<>(categories));
             }
+            ensureSecureFilePermissions(categoryFile);
         } catch (IOException e) {
             throw new IllegalStateException("Could not save categories", e);
+        }
+    }
+
+    private void ensureSecureDirectory(Path dir) throws IOException {
+        if (dir != null && !Files.exists(dir)) {
+            if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
+                var attr = java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                        java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+                Files.createDirectories(dir, attr);
+            } else {
+                Files.createDirectories(dir);
+            }
+        }
+    }
+
+    private void ensureSecureFilePermissions(Path file) {
+        if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix") && Files.exists(file)) {
+            try {
+                Files.setPosixFilePermissions(file,
+                        java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            } catch (IOException ignored) { }
         }
     }
 

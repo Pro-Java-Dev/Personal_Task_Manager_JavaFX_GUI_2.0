@@ -48,7 +48,7 @@
 .page-subtitle { -fx-text-fill: #7c8983; -fx-font-size: 13px; -fx-padding: 0 0 4px; }
 .toolbar { -fx-padding: 24px 0 27px; }
 .search-field { -fx-background-color: white; -fx-background-radius: 10px; -fx-border-color: #e4e9e6; -fx-border-radius: 10px; -fx-padding: 11px 14px; -fx-prompt-text-fill: #a3afaa; -fx-text-fill: #34433c; -fx-pref-width: 310px; -fx-effect: dropshadow(gaussian, rgba(27,48,37,0.035), 12, 0, 0, 3); }
-.search-field:focused { -fx-border-color: #83b99a; -fx-effect: dropshadow(gaussian, rgba(50,130,88,0.12), 10, 0, 0, 1); }
+.search-field:focused { -fx-border-color: #39815d; -fx-border-width: 1.5px; -fx-effect: dropshadow(gaussian, rgba(57,129,93,0.18), 10, 0, 0, 1); }
 .primary-button { -fx-background-color: linear-gradient(to bottom right, #39865e, #28734e); -fx-background-radius: 10px; -fx-background-insets: 0; -fx-border-color: transparent; -fx-border-radius: 10px; -fx-text-fill: white; -fx-padding: 11px 17px; -fx-font-weight: 650; -fx-cursor: hand; -fx-effect: dropshadow(gaussian, rgba(31,92,61,0.18), 10, 0, 0, 3); }
 .primary-button:hover { -fx-background-color: #286f4c; -fx-effect: dropshadow(gaussian, rgba(31,92,61,0.25), 12, 0, 0, 4); }
 .primary-button:focused { -fx-border-color: #a9d5b9; -fx-border-width: 2px; -fx-background-insets: 2px; }
@@ -70,7 +70,7 @@
 .task-list .list-cell { -fx-background-color: transparent; -fx-padding: 0 0 11px; }
 .task-list .list-cell:filled:hover, .task-list .list-cell:filled:selected { -fx-background-color: transparent; }
 .task-card { -fx-background-color: white; -fx-background-radius: 13px; -fx-border-color: #e8ece9; -fx-border-radius: 13px; -fx-padding: 16px 17px; -fx-min-height: 94px; -fx-effect: dropshadow(gaussian, rgba(29,51,39,0.035), 12, 0, 0, 3); }
-.task-card:hover { -fx-border-color: #c9dfd1; -fx-effect: dropshadow(gaussian, rgba(37,65,49,0.09), 15, 0, 0, 4); }
+.task-card:hover { -fx-border-color: #b0d4c1; -fx-effect: dropshadow(gaussian, rgba(37,65,49,0.12), 15, 0, 0, 4); }
 .task-check { -fx-padding: 0 3px; }
 .task-check .box { -fx-background-color: white; -fx-border-color: #bdcbc2; -fx-border-radius: 50%; -fx-background-radius: 50%; -fx-min-width: 18px; -fx-min-height: 18px; -fx-border-width: 1.5px; }
 .task-check:hover .box { -fx-border-color: #6ea987; -fx-background-color: #f4faf6; }
