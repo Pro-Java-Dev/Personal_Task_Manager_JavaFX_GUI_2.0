@@ -3,10 +3,15 @@ package com.taskflow;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -24,6 +29,9 @@ public class TaskManagerApp extends Application {
     private final TaskRepository repository = new TaskRepository();
     private final ObservableList<Task> tasks = FXCollections.observableArrayList();
     private final ObservableList<Category> categories = FXCollections.observableArrayList();
+
+    private FilteredList<Task> filteredTasks;
+    private SortedList<Task> sortedTasks;
 
     private final ListView<Task> taskList = new ListView<>();
     private final TextField searchField = new TextField();
@@ -62,6 +70,9 @@ public class TaskManagerApp extends Application {
         tasks.setAll(repository.load());
         categories.setAll(repository.loadCategories());
 
+        filteredTasks = new FilteredList<>(tasks, this::matchesFilterAndSearch);
+        sortedTasks = new SortedList<>(filteredTasks, getComparator(sortBox.getValue()));
+
         BorderPane shell = new BorderPane();
         shell.getStyleClass().add("app-shell");
         shell.setLeft(buildSidebar());
@@ -73,6 +84,21 @@ public class TaskManagerApp extends Application {
         stage.setMinWidth(980);
         stage.setMinHeight(680);
         stage.setScene(scene);
+
+        // Keyboard Shortcuts: Ctrl+N (New Task), Ctrl+F (Search)
+        KeyCombination newShortcut = new KeyCodeCombination(KeyCode.N, KeyCombination.CONTROL_DOWN);
+        KeyCombination searchShortcut = new KeyCodeCombination(KeyCode.F, KeyCombination.CONTROL_DOWN);
+        scene.setOnKeyPressed(event -> {
+            if (newShortcut.match(event)) {
+                editTask(null);
+                event.consume();
+            } else if (searchShortcut.match(event)) {
+                searchField.requestFocus();
+                searchField.selectAll();
+                event.consume();
+            }
+        });
+
         stage.show();
         refresh();
     }
@@ -452,9 +478,13 @@ public class TaskManagerApp extends Application {
 
         sortBox.setValue("Due date");
         sortBox.getStyleClass().add("sort-box");
-        sortBox.valueProperty().addListener((o, old, value) -> refresh());
+        sortBox.valueProperty().addListener((o, old, value) -> {
+            sortedTasks.setComparator(getComparator(value));
+            refreshCountAndNav();
+        });
         listHead.getChildren().addAll(listTitle, countLabel, headPush, new Label("Sort by"), sortBox);
 
+        taskList.setItems(sortedTasks);
         taskList.setCellFactory(list -> new TaskCell());
         taskList.getStyleClass().add("task-list");
         VBox.setVgrow(taskList, Priority.ALWAYS);
@@ -480,34 +510,43 @@ public class TaskManagerApp extends Application {
     }
 
     private void refresh() {
-        if (taskList.getScene() != null) {
-            String sort = String.valueOf(sortBox.getValue());
-            List<Task> filtered = tasks.stream()
-                    .filter(this::matches)
-                    .filter(t -> {
-                        String q = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase(Locale.ROOT);
-                        return q.isEmpty() || t.getTitle().toLowerCase(Locale.ROOT).contains(q) || t.getDescription().toLowerCase(Locale.ROOT).contains(q);
-                    })
-                    .sorted(switch (sort) {
-                        case "Priority" -> Comparator.comparingInt(t -> priorityRank(t.getPriority()));
-                        case "Newest" -> Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.reverseOrder()));
-                        default -> Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder()));
-                    })
-                    .toList();
+        if (filteredTasks != null) {
+            filteredTasks.setPredicate(this::matchesFilterAndSearch);
+            refreshCountAndNav();
+        }
+    }
 
-            taskList.setItems(FXCollections.observableArrayList(filtered));
-            countLabel.setText(filtered.size() + (filtered.size() == 1 ? " task" : " tasks"));
+    private void refreshCountAndNav() {
+        if (taskList.getScene() != null && filteredTasks != null) {
+            int size = filteredTasks.size();
+            countLabel.setText(size + (size == 1 ? " task" : " tasks"));
             updateActiveNav();
         }
     }
 
-    private boolean matches(Task task) {
+    private boolean matchesFilterAndSearch(Task task) {
+        if (task == null) return false;
         if (!currentCategory.equals("All") && !task.getCategory().equalsIgnoreCase(currentCategory)) return false;
-        return switch (currentFilter) {
+
+        boolean matchesFilter = switch (currentFilter) {
             case "Today" -> !task.isCompleted() && task.getDueDate() != null && task.getDueDate().equals(LocalDate.now());
             case "Upcoming" -> !task.isCompleted() && task.getDueDate() != null && task.getDueDate().isAfter(LocalDate.now());
             case "Completed" -> task.isCompleted();
             default -> !task.isCompleted();
+        };
+
+        if (!matchesFilter) return false;
+
+        String q = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase(Locale.ROOT);
+        return q.isEmpty() || task.getTitle().toLowerCase(Locale.ROOT).contains(q) || task.getDescription().toLowerCase(Locale.ROOT).contains(q);
+    }
+
+    private Comparator<Task> getComparator(String sortOption) {
+        if (sortOption == null) sortOption = "Due date";
+        return switch (sortOption) {
+            case "Priority" -> Comparator.comparingInt((Task t) -> priorityRank(t.getPriority())).thenComparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder()));
+            case "Newest" -> Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.reverseOrder()));
+            default -> Comparator.comparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder()));
         };
     }
 

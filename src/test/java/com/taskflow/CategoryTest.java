@@ -23,6 +23,12 @@ class CategoryTest {
     }
 
     @Test
+    void testHtmlTagStripping() {
+        Category cat = new Category("<script>alert('xss')</script>Marketing", "#5d7ebd", false);
+        assertEquals("alert('xss')Marketing", cat.getName());
+    }
+
+    @Test
     void testColorSanitizationFallback() {
         Category cat = new Category("Design", "invalidColor", false);
         assertEquals("#39815d", cat.getColorHex());
