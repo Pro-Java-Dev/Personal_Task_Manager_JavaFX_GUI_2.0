@@ -19,11 +19,7 @@ import javafx.stage.Stage;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
+import java.util.*;
 
 public class TaskManagerApp extends Application {
     private final TaskRepository repository = new TaskRepository();
@@ -41,6 +37,7 @@ public class TaskManagerApp extends Application {
 
     private VBox sidebar;
     private VBox categoriesBox;
+    private ScrollPane categoriesScrollPane;
     private HBox sidebarBrand;
     private Label sidebarBrandName;
     private Region sidebarBrandSpacer;
@@ -55,20 +52,24 @@ public class TaskManagerApp extends Application {
     private String currentFilter = "All tasks";
     private String currentCategory = "All";
 
+    // Category Color Cache for high performance UI rendering
+    private final Map<String, String> categoryColorCache = new HashMap<>();
+
     private final List<String> paletteColors = Arrays.asList(
-            "#5d7ebd", // Blue
-            "#ae7c39", // Orange
-            "#39815d", // Emerald Green
-            "#885ebd", // Purple
-            "#2b8c8d", // Teal
-            "#c85a82", // Rose Pink
-            "#c85252"  // Crimson
+            "#4c6cb3", // Blue
+            "#b3742d", // Orange
+            "#228b58", // Emerald Green
+            "#8050b3", // Purple
+            "#228285", // Teal
+            "#b54e75", // Rose Pink
+            "#b84343"  // Crimson
     );
 
     @Override
     public void start(Stage stage) {
         tasks.setAll(repository.load());
         categories.setAll(repository.loadCategories());
+        updateCategoryColorCache();
 
         filteredTasks = new FilteredList<>(tasks, this::matchesFilterAndSearch);
         sortedTasks = new SortedList<>(filteredTasks, getComparator(sortBox.getValue()));
@@ -101,6 +102,13 @@ public class TaskManagerApp extends Application {
 
         stage.show();
         refresh();
+    }
+
+    private void updateCategoryColorCache() {
+        categoryColorCache.clear();
+        for (Category cat : categories) {
+            categoryColorCache.put(cat.getName().toLowerCase(Locale.ROOT), cat.getColorHex());
+        }
     }
 
     private VBox buildSidebar() {
@@ -148,12 +156,15 @@ public class TaskManagerApp extends Application {
         sidebar.getChildren().add(listsHeader);
 
         categoriesBox = new VBox(2);
-        sidebar.getChildren().add(categoriesBox);
-        rebuildCategoriesNav();
+        categoriesScrollPane = new ScrollPane(categoriesBox);
+        categoriesScrollPane.setFitToWidth(true);
+        categoriesScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        categoriesScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        categoriesScrollPane.getStyleClass().add("categories-scroll");
+        VBox.setVgrow(categoriesScrollPane, Priority.ALWAYS);
 
-        Region spacer = new Region();
-        VBox.setVgrow(spacer, Priority.ALWAYS);
-        sidebar.getChildren().add(spacer);
+        sidebar.getChildren().add(categoriesScrollPane);
+        rebuildCategoriesNav();
 
         profileTitle = new Label("YOUR SPACE");
         profileTitle.getStyleClass().add("sidebar-footer-title");
@@ -198,7 +209,7 @@ public class TaskManagerApp extends Application {
         try {
             dot.setFill(Color.web(cat.getColorHex()));
         } catch (Exception e) {
-            dot.setFill(Color.web("#39815d"));
+            dot.setFill(Color.web("#228b58"));
         }
 
         Label caption = new Label(cat.getName());
@@ -257,7 +268,6 @@ public class TaskManagerApp extends Application {
         HBox colorPickerBox = new HBox(10);
         colorPickerBox.setAlignment(Pos.CENTER_LEFT);
 
-        String selectedColor = paletteColors.get(0);
         for (int i = 0; i < paletteColors.size(); i++) {
             String hex = paletteColors.get(i);
             RadioButton rb = new RadioButton();
@@ -301,6 +311,7 @@ public class TaskManagerApp extends Application {
                 return;
             }
             categories.add(cat);
+            updateCategoryColorCache();
             repository.saveCategories(categories);
             rebuildCategoriesNav();
             currentCategory = cat.getName();
@@ -320,6 +331,7 @@ public class TaskManagerApp extends Application {
         Optional<ButtonType> result = confirm.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
             categories.remove(category);
+            updateCategoryColorCache();
             repository.saveCategories(categories);
 
             // Reassign affected tasks
@@ -482,7 +494,9 @@ public class TaskManagerApp extends Application {
             sortedTasks.setComparator(getComparator(value));
             refreshCountAndNav();
         });
-        listHead.getChildren().addAll(listTitle, countLabel, headPush, new Label("Sort by"), sortBox);
+        Label sortLabel = new Label("Sort by");
+        sortLabel.getStyleClass().add("sort-label");
+        listHead.getChildren().addAll(listTitle, countLabel, headPush, sortLabel, sortBox);
 
         taskList.setItems(sortedTasks);
         taskList.setCellFactory(list -> new TaskCell());
@@ -647,101 +661,148 @@ public class TaskManagerApp extends Application {
         repository.saveCategories(categories);
     }
 
+    /**
+     * Highly optimized TaskCell class.
+     * Reuses Node hierarchies across scrolling/virtualization instead of re-instantiating.
+     */
     private class TaskCell extends ListCell<Task> {
+        private final HBox card = new HBox(14);
+        private final CheckBox done = new CheckBox();
+        private final VBox content = new VBox(6);
+        private final Label title = new Label();
+        private final Label description = new Label();
+        private final HBox meta = new HBox(8);
+        private final Label categoryPill = new Label();
+        private final Label priorityPill = new Label();
+
+        private final VBox due = new VBox(3);
+        private final Label dueLabel = new Label();
+        private final Label dueHint = new Label();
+
+        private final Button edit = new Button("···");
+
+        private Task currentTask;
+
+        public TaskCell() {
+            card.setAlignment(Pos.CENTER_LEFT);
+            card.getStyleClass().add("task-card");
+
+            done.getStyleClass().add("task-check");
+            done.setOnAction(e -> {
+                if (currentTask != null) {
+                    currentTask.setCompleted(done.isSelected());
+                    persist();
+                    refresh();
+                }
+            });
+
+            HBox.setHgrow(content, Priority.ALWAYS);
+            title.getStyleClass().add("task-name");
+            description.getStyleClass().add("task-description");
+
+            meta.setAlignment(Pos.CENTER_LEFT);
+            categoryPill.getStyleClass().add("category-pill");
+            priorityPill.getStyleClass().add("priority-pill");
+            meta.getChildren().addAll(categoryPill, priorityPill);
+
+            content.getChildren().addAll(title, description, meta);
+
+            due.setAlignment(Pos.CENTER_RIGHT);
+            due.getStyleClass().add("due-box");
+            dueLabel.getStyleClass().add("due-date");
+            dueHint.getStyleClass().add("due-hint");
+            due.getChildren().addAll(dueLabel, dueHint);
+
+            edit.getStyleClass().add("more-button");
+            edit.setOnAction(e -> {
+                if (currentTask != null) {
+                    MenuItem editItem = new MenuItem("Edit task");
+                    editItem.setOnAction(ev -> editTask(currentTask));
+                    MenuItem deleteItem = new MenuItem("Delete task");
+                    deleteItem.setOnAction(ev -> {
+                        tasks.remove(currentTask);
+                        persist();
+                        refresh();
+                    });
+                    new ContextMenu(editItem, deleteItem).show(edit, javafx.geometry.Side.BOTTOM, 0, 0);
+                }
+            });
+
+            card.getChildren().addAll(done, content, due, edit);
+        }
+
         @Override
         protected void updateItem(Task task, boolean empty) {
             super.updateItem(task, empty);
+            this.currentTask = task;
+
             if (empty || task == null) {
                 setGraphic(null);
                 setText(null);
                 return;
             }
 
-            HBox card = new HBox(14);
-            card.setAlignment(Pos.CENTER_LEFT);
-            card.getStyleClass().add("task-card");
-
-            CheckBox done = new CheckBox();
+            // Update state
             done.setSelected(task.isCompleted());
-            done.getStyleClass().add("task-check");
-            done.setOnAction(e -> {
-                task.setCompleted(done.isSelected());
-                persist();
-                refresh();
-            });
 
-            VBox content = new VBox(6);
-            HBox.setHgrow(content, Priority.ALWAYS);
+            title.setText(task.getTitle());
+            title.getStyleClass().remove("task-done");
+            if (task.isCompleted()) {
+                title.getStyleClass().add("task-done");
+            }
 
-            Label title = new Label(task.getTitle());
-            title.getStyleClass().add("task-name");
-            if (task.isCompleted()) title.getStyleClass().add("task-done");
+            description.setText(task.getDescription().isBlank() ? "No details added" : task.getDescription());
 
-            Label description = new Label(task.getDescription().isBlank() ? "No details added" : task.getDescription());
-            description.getStyleClass().add("task-description");
+            // Category Pill optimization
+            updateCategoryPill(task.getCategory());
 
-            HBox meta = new HBox(8);
-            meta.setAlignment(Pos.CENTER_LEFT);
-            meta.getChildren().add(categoryPill(task.getCategory()));
+            // Priority Pill optimization
+            String prio = task.getPriority().toLowerCase(Locale.ROOT);
+            priorityPill.setText("●  " + task.getPriority());
+            priorityPill.getStyleClass().setAll("label", "priority-pill", "priority-" + prio);
 
-            Label priority = new Label("●  " + task.getPriority());
-            priority.getStyleClass().addAll("priority-pill", "priority-" + task.getPriority().toLowerCase(Locale.ROOT));
-            meta.getChildren().add(priority);
+            // Due Date optimization
+            LocalDate dueDateVal = task.getDueDate();
+            if (dueDateVal == null) {
+                dueLabel.setText("No date");
+                dueHint.setText("");
+                dueHint.getStyleClass().setAll("label", "due-hint");
+            } else {
+                dueLabel.setText(dueDateVal.format(DateTimeFormatter.ofPattern("MMM d")));
+                boolean isOverdue = dueDateVal.isBefore(LocalDate.now()) && !task.isCompleted();
+                boolean isToday = dueDateVal.equals(LocalDate.now());
 
-            content.getChildren().addAll(title, description, meta);
+                if (isOverdue) {
+                    dueHint.setText("OVERDUE");
+                    dueHint.getStyleClass().setAll("label", "due-hint", "overdue");
+                } else if (isToday) {
+                    dueHint.setText("TODAY");
+                    dueHint.getStyleClass().setAll("label", "due-hint");
+                } else {
+                    dueHint.setText("DUE DATE");
+                    dueHint.getStyleClass().setAll("label", "due-hint");
+                }
+            }
 
-            VBox due = new VBox(3);
-            due.setAlignment(Pos.CENTER_RIGHT);
-            due.getStyleClass().add("due-box");
-
-            Label dueLabel = new Label(task.getDueDate() == null ? "No date" : task.getDueDate().format(DateTimeFormatter.ofPattern("MMM d")));
-            dueLabel.getStyleClass().add("due-date");
-
-            Label dueHint = new Label(task.getDueDate() == null ? "" : task.getDueDate().isBefore(LocalDate.now()) && !task.isCompleted() ? "OVERDUE" : task.getDueDate().equals(LocalDate.now()) ? "TODAY" : "DUE DATE");
-            dueHint.getStyleClass().add("due-hint");
-            if (dueHint.getText().equals("OVERDUE")) dueHint.getStyleClass().add("overdue");
-
-            due.getChildren().addAll(dueLabel, dueHint);
-
-            Button edit = new Button("···");
-            edit.getStyleClass().add("more-button");
-
-            MenuItem editItem = new MenuItem("Edit task");
-            editItem.setOnAction(e -> editTask(task));
-
-            MenuItem deleteItem = new MenuItem("Delete task");
-            deleteItem.setOnAction(e -> {
-                tasks.remove(task);
-                persist();
-                refresh();
-            });
-
-            edit.setOnAction(e -> new ContextMenu(editItem, deleteItem).show(edit, javafx.geometry.Side.BOTTOM, 0, 0));
-
-            card.getChildren().addAll(done, content, due, edit);
             setGraphic(card);
         }
 
-        private Label categoryPill(String categoryName) {
-            Label label = new Label(categoryName);
-            label.getStyleClass().add("category-pill");
+        private void updateCategoryPill(String categoryName) {
+            categoryPill.setText(categoryName);
+            categoryPill.getStyleClass().setAll("label", "category-pill");
 
-            Optional<Category> catOpt = categories.stream()
-                    .filter(c -> c.getName().equalsIgnoreCase(categoryName))
-                    .findFirst();
-
-            if (catOpt.isPresent()) {
-                String hex = catOpt.get().getColorHex();
-                label.setStyle("-fx-background-color: " + hex + "1A; -fx-text-fill: " + hex + "; -fx-font-weight: 600;");
+            String hex = categoryColorCache.get(categoryName.toLowerCase(Locale.ROOT));
+            if (hex != null) {
+                categoryPill.setStyle("-fx-background-color: " + hex + "1A; -fx-text-fill: " + hex + "; -fx-font-weight: 600;");
             } else if (categoryName.equalsIgnoreCase("Work")) {
-                label.getStyleClass().add("work-pill");
+                categoryPill.getStyleClass().add("work-pill");
+                categoryPill.setStyle(null);
             } else if (categoryName.equalsIgnoreCase("Personal")) {
-                label.getStyleClass().add("personal-pill");
+                categoryPill.getStyleClass().add("personal-pill");
+                categoryPill.setStyle(null);
             } else {
-                label.setStyle("-fx-background-color: #e8eeea; -fx-text-fill: #52625a; -fx-font-weight: 600;");
+                categoryPill.setStyle("-fx-background-color: #e4ebe6; -fx-text-fill: #5a6d63; -fx-font-weight: 600;");
             }
-
-            return label;
         }
     }
 
