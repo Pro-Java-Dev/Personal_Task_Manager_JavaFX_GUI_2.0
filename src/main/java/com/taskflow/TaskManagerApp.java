@@ -33,6 +33,15 @@ public class TaskManagerApp extends Application {
     private final TextField searchField = new TextField();
     private final Label countLabel = new Label();
     private final Label greetingDate = new Label();
+    private final Label pageTitleLabel = new Label();
+    private final Label pageSubtitleLabel = new Label();
+
+    // Summary Stat Labels
+    private final Label totalStatValue = new Label("0");
+    private final Label completedStatValue = new Label("0");
+    private final Label todayStatValue = new Label("0");
+    private final Label overdueStatValue = new Label("0");
+
     private final ComboBox<String> sortBox = new ComboBox<>(FXCollections.observableArrayList("Due date", "Priority", "Newest"));
 
     private VBox sidebar;
@@ -215,7 +224,13 @@ public class TaskManagerApp extends Application {
         Label caption = new Label(cat.getName());
         caption.getStyleClass().add("nav-label");
 
-        HBox graphic = new HBox(10, dot, caption);
+        Region flex = new Region();
+        HBox.setHgrow(flex, Priority.ALWAYS);
+
+        Label badge = new Label("0");
+        badge.getStyleClass().add("nav-badge");
+
+        HBox graphic = new HBox(10, dot, caption, flex, badge);
         graphic.getStyleClass().add("nav-content");
         graphic.setAlignment(Pos.CENTER_LEFT);
 
@@ -223,6 +238,7 @@ public class TaskManagerApp extends Application {
         button.setTooltip(new Tooltip(cat.getName() + (cat.isDefaultCategory() ? " (Default)" : " (Custom Task Type)")));
         button.setUserData("category:" + cat.getName());
         button.getProperties().put("nav-label", caption);
+        button.getProperties().put("nav-badge", badge);
         button.getProperties().put("category", cat);
         button.setMaxWidth(Double.MAX_VALUE);
         button.setAlignment(sidebarCollapsed ? Pos.CENTER : Pos.CENTER_LEFT);
@@ -359,12 +375,20 @@ public class TaskManagerApp extends Application {
         if (iconStyle != null) glyph.getStyleClass().add(iconStyle);
         Label caption = new Label(text);
         caption.getStyleClass().add("nav-label");
-        HBox graphic = new HBox(12, glyph, caption);
+
+        Region flex = new Region();
+        HBox.setHgrow(flex, Priority.ALWAYS);
+
+        Label badge = new Label("0");
+        badge.getStyleClass().add("nav-badge");
+
+        HBox graphic = new HBox(12, glyph, caption, flex, badge);
         graphic.getStyleClass().add("nav-content");
         graphic.setAlignment(Pos.CENTER_LEFT);
         button.setGraphic(graphic);
         button.setTooltip(new Tooltip(text));
         button.getProperties().put("nav-label", caption);
+        button.getProperties().put("nav-badge", badge);
     }
 
     private void setSidebarCollapsed(boolean collapsed) {
@@ -400,9 +424,14 @@ public class TaskManagerApp extends Application {
                 label.setManaged(!collapsed);
             } else if (node instanceof Button button) {
                 Label caption = (Label) button.getProperties().get("nav-label");
+                Label badge = (Label) button.getProperties().get("nav-badge");
                 if (caption != null) {
                     caption.setVisible(!collapsed);
                     caption.setManaged(!collapsed);
+                }
+                if (badge != null) {
+                    badge.setVisible(!collapsed);
+                    badge.setManaged(!collapsed);
                 }
                 button.setAlignment(collapsed ? Pos.CENTER : Pos.CENTER_LEFT);
                 HBox graphic = (HBox) button.getGraphic();
@@ -413,9 +442,14 @@ public class TaskManagerApp extends Application {
         for (var node : categoriesBox.getChildren()) {
             if (node instanceof Button button) {
                 Label caption = (Label) button.getProperties().get("nav-label");
+                Label badge = (Label) button.getProperties().get("nav-badge");
                 if (caption != null) {
                     caption.setVisible(!collapsed);
                     caption.setManaged(!collapsed);
+                }
+                if (badge != null) {
+                    badge.setVisible(!collapsed);
+                    badge.setManaged(!collapsed);
                 }
                 button.setAlignment(collapsed ? Pos.CENTER : Pos.CENTER_LEFT);
                 HBox graphic = (HBox) button.getGraphic();
@@ -456,13 +490,14 @@ public class TaskManagerApp extends Application {
         topbar.getChildren().addAll(date, avatar);
 
         VBox heading = new VBox(7);
+        heading.getStyleClass().add("heading-box");
         greetingDate.getStyleClass().add("eyebrow");
         greetingDate.setText(LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d", Locale.ENGLISH)).toUpperCase(Locale.ROOT));
-        Label title = new Label("Make room for\nwhat matters.");
-        title.getStyleClass().add("page-title");
-        Label subtitle = new Label("A clear mind starts with a clear plan.");
-        subtitle.getStyleClass().add("page-subtitle");
-        heading.getChildren().addAll(greetingDate, title, subtitle);
+        pageTitleLabel.getStyleClass().add("page-title");
+        pageSubtitleLabel.getStyleClass().add("page-subtitle");
+        heading.getChildren().addAll(greetingDate, pageTitleLabel, pageSubtitleLabel);
+
+        HBox statsBar = buildStatsBar();
 
         HBox actions = new HBox(12);
         actions.setAlignment(Pos.CENTER_LEFT);
@@ -519,7 +554,7 @@ public class TaskManagerApp extends Application {
         taskList.setPlaceholder(emptyState);
 
         VBox.setMargin(taskList, new Insets(0, 0, 0, 0));
-        main.getChildren().addAll(topbar, heading, actions, listHead, taskList);
+        main.getChildren().addAll(topbar, heading, statsBar, actions, listHead, taskList);
         return main;
     }
 
@@ -530,10 +565,114 @@ public class TaskManagerApp extends Application {
         }
     }
 
+    private HBox buildStatsBar() {
+        HBox bar = new HBox(14);
+        bar.getStyleClass().add("stats-bar");
+
+        VBox totalCard = createStatCard("TOTAL TASKS", totalStatValue, false);
+        VBox completedCard = createStatCard("COMPLETED", completedStatValue, false);
+        VBox todayCard = createStatCard("DUE TODAY", todayStatValue, false);
+        VBox overdueCard = createStatCard("OVERDUE", overdueStatValue, true);
+
+        bar.getChildren().addAll(totalCard, completedCard, todayCard, overdueCard);
+        return bar;
+    }
+
+    private VBox createStatCard(String labelText, Label valueLabel, boolean isOverdue) {
+        VBox card = new VBox(4);
+        card.getStyleClass().add("stat-card");
+        if (isOverdue) {
+            card.getStyleClass().add("stat-card-overdue");
+        }
+
+        valueLabel.getStyleClass().add("stat-value");
+        if (isOverdue) {
+            valueLabel.getStyleClass().add("stat-value-overdue");
+        }
+
+        Label label = new Label(labelText);
+        label.getStyleClass().add("stat-label");
+
+        card.getChildren().addAll(valueLabel, label);
+        return card;
+    }
+
+    private void updateHeaderAndStats() {
+        // Dynamic Title & Subtitle
+        if (!currentCategory.equals("All")) {
+            pageTitleLabel.setText(currentCategory);
+            pageSubtitleLabel.setText("Viewing tasks under the " + currentCategory + " list.");
+        } else {
+            switch (currentFilter) {
+                case "Today" -> {
+                    pageTitleLabel.setText("Today's Focus");
+                    pageSubtitleLabel.setText("Tasks scheduled for completion today.");
+                }
+                case "Upcoming" -> {
+                    pageTitleLabel.setText("Upcoming Tasks");
+                    pageSubtitleLabel.setText("Plan ahead for tasks due in the future.");
+                }
+                case "Completed" -> {
+                    pageTitleLabel.setText("Completed Tasks");
+                    pageSubtitleLabel.setText("A record of your accomplished milestones.");
+                }
+                default -> {
+                    pageTitleLabel.setText("Make room for\nwhat matters.");
+                    pageSubtitleLabel.setText("A clear mind starts with a clear plan.");
+                }
+            }
+        }
+
+        // Calculate Summary Statistics
+        int totalCount = tasks.size();
+        long completedCount = tasks.stream().filter(Task::isCompleted).count();
+        long todayCount = tasks.stream().filter(t -> !t.isCompleted() && t.getDueDate() != null && t.getDueDate().equals(LocalDate.now())).count();
+        long overdueCount = tasks.stream().filter(t -> !t.isCompleted() && t.getDueDate() != null && t.getDueDate().isBefore(LocalDate.now())).count();
+
+        totalStatValue.setText(String.valueOf(totalCount));
+        completedStatValue.setText(String.valueOf(completedCount));
+        todayStatValue.setText(String.valueOf(todayCount));
+        overdueStatValue.setText(String.valueOf(overdueCount));
+
+        // Update Sidebar Badges
+        long allTasksPending = tasks.stream().filter(t -> !t.isCompleted()).count();
+        long upcomingCount = tasks.stream().filter(t -> !t.isCompleted() && t.getDueDate() != null && t.getDueDate().isAfter(LocalDate.now())).count();
+
+        for (var node : sidebar.getChildren()) {
+            if (node instanceof Button b && b.getUserData() != null) {
+                Label badge = (Label) b.getProperties().get("nav-badge");
+                if (badge != null) {
+                    String filterKey = b.getUserData().toString();
+                    long count = switch (filterKey) {
+                        case "All tasks" -> allTasksPending;
+                        case "Today" -> todayCount;
+                        case "Upcoming" -> upcomingCount;
+                        case "Completed" -> completedCount;
+                        default -> 0;
+                    };
+                    badge.setText(String.valueOf(count));
+                }
+            }
+        }
+
+        for (var node : categoriesBox.getChildren()) {
+            if (node instanceof Button b && b.getProperties().get("category") instanceof Category cat) {
+                Label badge = (Label) b.getProperties().get("nav-badge");
+                if (badge != null) {
+                    long catCount = tasks.stream()
+                            .filter(t -> !t.isCompleted() && t.getCategory().equalsIgnoreCase(cat.getName()))
+                            .count();
+                    badge.setText(String.valueOf(catCount));
+                }
+            }
+        }
+    }
+
     private void refreshCountAndNav() {
         if (taskList.getScene() != null && filteredTasks != null) {
             int size = filteredTasks.size();
             countLabel.setText(size + (size == 1 ? " task" : " tasks"));
+            updateHeaderAndStats();
             updateActiveNav();
         }
     }
